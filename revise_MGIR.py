@@ -775,19 +775,10 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
     INPUT = 'noise'
     temp_scale = sad_scale
     Y, A_true, P, M_true,rCol, nCol, msfa25_img, mean_mosaic,pca_a,pca_b,pca_c,max_value,Undip_Y,hsi_mean,block_num = my_load(path)
-    # fcls_y = (Y.reshape(block_num,block_num,25,5,5).transpose(0,3,1,4,2).reshape(-1,25))
-
     hsi_mean = torch.tensor(hsi_mean, dtype=torch.float32).to(device)
     Undip_Y = torch.tensor(Undip_Y, dtype=torch.float32).unsqueeze(0).to(device)
     endmember_num = np.mean(Y, axis=(2, 3))
     endmember_num = np.expand_dims(endmember_num, axis=1)
-    # P = 4
-    # endmember_num = np.zeros((Y.shape[0],25,1))
-    # for vc in range(Y.shape[0]):
-    #     temp_vc = Y[vc,:,:,:]
-    #     temp_vc = temp_vc.reshape(25,25)
-    #     endmember_num[vc,:,:], _, snrEstimate = hyperVca(temp_vc, 1)
-    # endmember_num = endmember_num.transpose(0,2,1)
     endmember_num = torch.tensor(endmember_num, dtype=torch.float32).to(device)
     net_input1 = get_noise(P, INPUT,
                            (rCol, nCol)).type(dtype).detach()
@@ -810,49 +801,17 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
     SAD = StableSADLoss()
     SAD2 = StableSADLoss2()
     z_dim = P
-
-    # print('SNR:', snrEstimate)
-    # msfa25_cube = torch.tensor(msfa25_cube).unsqueeze(0).to(device)
     mean_mosaic = torch.tensor(mean_mosaic.astype('float32')).to(device).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
     batchs, Channel, r_patch,c_patch = Y.shape
     batch_size = 1
-    # Y = Y.reshape(batchs*Channel, r_patch, c_patch)
-    #
-    # Y = torch.tensor(Y).unsqueeze(0)
-    # train_cube = Y
-    # train_cube = torch.utils.data.TensorDataset(train_cube)
-    # train_cube = torch.utils.data.DataLoader(train_cube, batch_size=batch_size, shuffle=True)
+   
     RANK = 1
-    # set_seed(seeds)
-    model = SSAF(RANK, Channel, rCol, nCol, z_dim, batchs).to(device)
-    # with torch.no_grad():
-    #     model.end_weights.data.copy_(endmember_num)
-    # CyCu = AutoEncoder(z_dim, Channel).cuda()
-    # nn.init.kaiming_normal_(CyCu.encoder[0].weight.data)
-    # nn.init.kaiming_normal_(CyCu.encoder[4].weight.data)
-    # nn.init.kaiming_normal_(CyCu.encoder[7].weight.data)
-    # CyCu.apply(weights_init2)
     criterionSumToOne = SumToOneLoss(gamma).cuda()
     criterionSparse = SparseKLloss(sparse_decay).cuda()
-
-    # abundance = CAE_AbEst(z_dim, z_dim,rCol, nCol).to(device)
-
-    # model = SSAF(P, Channel, rCol, nCol, z_dim, M0,batchs).to(device)
     model.apply(weights_init)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     tic = time()
-    chaos = spectral_chaos_batch(Y)
-    threshold = np.percentile(chaos, 50)
-
-    # ¡À¡ê¨¢????¨¨?¡§?¨¦
-    mask = chaos <= threshold
-    remove_Y = Y[~mask, :, :, :]
-    crop_Y = Y[mask, :, :, :]
-    scio.savemat('crop_Y.mat', {'crop_Y': crop_Y})
-    scio.savemat('remove_Y.mat', {'remove_Y': remove_Y})
-    remain = Y[mask, :, :, :].transpose(0, 2, 3, 1)
-    all_ems = []
     Endmember = remain.reshape(-1, 25)
     EM_hat, _, _ = hyperVca(Endmember.T, P)
     temp_EM = EM_hat
@@ -1000,9 +959,6 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
         else:
             # LPF
 
-
-
-
             RE = residual_re(RE, Undip_Y, full_mask, kernel, alpha=1)
             Y = RE.cpu().numpy()
 
@@ -1066,10 +1022,6 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
                 optimizer3 = torch.optim.Adam(CyCu.parameters(), lr=LR, weight_decay=weight_decay_param)
                 scheduler = torch.optim.lr_scheduler.StepLR(optimizer3, step_size=20, gamma=0.8)
                 apply_clamp_inst1 = NonZeroClipper()
-                # gg = gg.reshape(rCol // 5, nCol // 5, 5, 5, Channel).transpose(0, 2, 1, 3, 4)
-                # gg = gg.reshape(rCol, nCol, Channel)
-                # gg = torch.tensor(gg).to(device)
-                # x = gg.permute(2,0,1).unsqueeze(0)
                 for epoch in range(EPOCH):
                     CyCu.train().cuda()
                     # x = x.cuda()
@@ -1135,20 +1087,6 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
                 endmember_hat = E_VCA_init
             EM_hat = endmember_hat
             EM_hat2 = EM_hat.repeat(1, 1, rCol, nCol)
-            # RE = (1 - full_mask) * RE + full_mask * (Undip_Y - RE)
-            # RE = (1 - full_mask) * RE + full_mask * (full_msfa + RE)
-            # RE = (1-full_mask) * RE + full_mask * full_msfa
-            # RE = RE.mean(dim = (0,1))
-            # sparse_mask = full_mask * full_msfa
-            # RE = IPPI_reconstruction(
-            #     RE,
-            #     sparse_mask,
-            #     epoch_num=1
-            # )
-            # fcls_y = RE.detach().cpu().numpy().reshape(25,-1)
-            # FCLS_a = FCLSU(temp_EM , fcls_y, 0.01)
-            # FCLS_a = FCLS_a.clone().detach()
-            # FCLS_a = torch.reshape(FCLS_a, (P, rCol, nCol)).unsqueeze(0).to(device)
 
         abundance.train()
         # if E_step == 1:
@@ -1165,10 +1103,6 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
             # loss_a = (abu_est - FCLS_a).square().sum() / FCLS_a.shape[2] / FCLS_a.shape[3]
             factor_smooth = scaling_smooth_loss(factor)
             scale_one = scale_regularization(factor)
-            # loss = loss
-            # loss = loss + 10 * loss_a + factor_smooth
-            # loss = loss + 0.001 * loss_a + 0.01 * factor_smooth
-            # loss = loss + 0.01 * factor_smooth + scale_one
             loss = loss + 0.05 * scale_one + 0.01 * factor_smooth
             optimizerA.zero_grad()
             loss.backward()
@@ -1219,13 +1153,6 @@ def train(lr=0.05, path = '' ,base = '',sad_scale = 0.0, seeds = 3, iters = 20,E
 
 
 if __name__ == '__main__':
-    # folder = '/home/Chengmohan/文档/jiehun/database/paperdata'
-    # Endmember_folder = '/home/Chengmohan/文档/jiehun/Snapshot_Image_Demosaicing_Unmixing_Completion-main/Results'
-    # folder = '/home/Chengmohan/文档/jiehun/database/IPPI_old'
-    # folder = '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/data/noisy/simple'
-    # folder = '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/data/noisy/simple'
-    # folder = '/home/Chengmohan/文档/jiehun/database/OUR'
-    # folder = '/home/Chengmohan/文档/jiehun/database/DC2_noisy/IPPI'
     folder = '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/data/Urban6'
     mat_files = [
         os.path.join(folder, f)
@@ -1233,83 +1160,23 @@ if __name__ == '__main__':
         if f.endswith('.mat')
     ]
     picture_num = len(mat_files)
-    # save_path = '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our'
-    # save_path = '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/reject_resub/simple_noisy'
+
     save_path = '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/revise_visualize/ablitaton'
     for cmh in mat_files:
-        # if cmh in ['/home/Chengmohan/文档/jiehun/database/IPPI_old/simple.mat','/home/Chengmohan/文档/jiehun/database/IPPI_old/complex.mat']:
-        #     continue
-        # if cmh != '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/data/noisy/simple/simple_20.mat':
-        #     continue
-        if cmh != '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/data/Urban6/Urban.mat':
-            continue
-        # if cmh != '/home/Chengmohan/文档/jiehun/result/cmh_results/final/change2/FIX_final/Our/mypaper_experiment/data/noisy/simple/simple_20.mat':
-        #     continue
-        # seeds = [1202, 6585, 7413, 1938, 8477, 1834, 6210, 9679, 8116, 7974]
         it = [1,2,3,4,5,6,7,8,9,10]
-
-        # seeds = [5932,9642,4267,6718,7027,6479,811,350,1546,473] # simple
-        # seeds = [574,7047,1989,9303,5408,2372,4879,7478,4394,8836]  # complex
-        # seeds = [2566,1775,6161,90,3337,3011,4088,280,5073,1106]  # Apex
-        # seeds = [18,2970,6386,3644,5634,2963,496,7397,5494,3812]  # Huston
-        # seeds = [8881,6830,9434,4037,9472,7595,6749,2225,3015,9835]  # Jasper
-        # seeds = [7488,9414,5397,9692,4756,3949,9069,339,1349,89]  # Urban
         print(cmh)
         filename = os.path.basename(cmh)  # "example.mat"
         # È¥µô .mat ºó×º````
         filename_no_ext = os.path.splitext(filename)[0]  # "example"
         # filename_no_ext = 'simple'
-        if filename_no_ext == 'Apex':
-            # seeds = [2566, 1775, 6161, 90, 3337, 3011, 4088, 280, 5073, 1106]  # Apex
-            seeds = [3280, 7643, 1065, 2019, 2533, 1019, 562, 6057, 3007, 5647, 5982, 5068, 5989, 2443, 7050, 9484,
-                     6852, 6344, 3675, 8162]
-        elif filename_no_ext == 'Urban':
-            # seeds = [7488, 9414, 5397, 9692, 4756, 3949, 9069, 339, 1349, 89]
-            # seeds = [361,2136,2760,3753,2774,9543,255,907,4687,3980]
-            seeds = [9348, 6629, 4534, 9439, 6210, 1686, 3479, 3633, 4602, 9633]
-            # seeds = [1628,1671,6600,7122,4687,4448,1595,3980,2291,1105,361,2136,2760,3753,6994,2268,2774,9543,255,907]
-        elif filename_no_ext == 'Jasper':
-            # seeds = [8881, 6830, 9434, 4037, 9472, 7595, 6749, 2225, 3015, 9835]
-            seeds = [3145,3717,7595,6749,2225,3015,9835,9945,7047,1989]
-            # seeds = [3145,3717,5071,4879,6532,6402,6830,9434,4037,9472,7595,6749,2225,3015,9835,9945,7047,1989,9303,5408]
-        elif filename_no_ext == 'Huston':
-            # seeds = [18, 2970, 6386, 3644, 5634, 2963, 496, 7397, 5494, 3812]
-            seeds = [6447,6634,2960,1144,8864,6528,9489,298,3372,8848,3581,3256,7344,9669,9595,892,3705,1782,8088,1506]
-            # seeds = [8156,765,549,9264,9779,6444,1003,865,6558,8921]
-        elif filename_no_ext == 'simple':
-            # seeds = [5932,9642,4267,6718,7027,6479,811,350,1546,473]
-            seeds = [2136,9905,3753,2268,2274,9543,255,907,6600,3942]
-            # seeds = [6751, 1279, 6057, 3007, 5647, 5982, 5068, 6884, 6989, 1059, 682, 8667, 7999, 3076, 9559, 5414,
-            #          2019, 2533, 1019, 562]
-        elif filename_no_ext == 'complex':
-            # seeds = [9945,7047,1989,9303,5408,2372,4879,7478,4394,8836]
-            seeds = [775, 7968, 6567, 3807, 4650, 5854, 4234, 2813, 9394, 8123, 2889, 9147, 8251, 2880, 8029, 9832,
-                     4942,
-                     195, 9757, 795]
-        elif filename_no_ext == 'Checkerboard':
-            # seeds = [9945,7047,1989,9303,5408,2372,4879,7478,4394,8836]
-            seeds = [775, 7968, 6567, 3807, 4650, 5854, 4234, 2813, 9394, 8123, 2889, 9147, 8251, 2880, 8029, 9832,
-                     4942,
-                     195, 9757, 795]
-        else:
-            break
-        # seeds = [9106,6600,9757,6567,2868,9867,9798,6143,6623,255]
-        # seeds = [2679,9106,2151,9798,6143,6623,9641,7056,9543,255,907,6600,9757,795,6567,2868,7824,1092,9867,3362]
-        # seeds = [2679,2151,6143,7059,907,9757,2868,7824,1092,3362]
-        # seeds = [2136,9905,3753,2268,2774,9543,255,907,6600,3942]
-        # for k in range(10):
         for k in range(2,3):
             temp_save_path = os.path.join(save_path, filename_no_ext,str(k))
             os.makedirs(temp_save_path, exist_ok=True)
             tv_path = os.path.join(temp_save_path, 'TV.xlsx')
             for j in range(10):
-                seed = seeds[j]
-                # seed = 1741
-                # seed = random.randint(1, 10000)
+                seed = random.randint(1, 10000)
                 print("Random Seed: ", seed)
                 # È¡×îºóÒ»²¿·ÖÎÄ¼þÃû
-
-
                 # # # xlsx
                 excel_path = filename_no_ext + '.xlsx'
                 mat_path = filename_no_ext + '.mat'
